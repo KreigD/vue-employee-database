@@ -1,92 +1,121 @@
 <template>
-  <div id="app">
-    <h1 class="text-center text-gray-700 font-light text-5xl my-5">Employees</h1>
-    <input
-      type="text"
-      ref="searchBox"
-      class="search-box shadow p-2 rounded"
-      placeholder="Search by name"
-      v-on:input="inputChange"
+  <div id="app" class="font-sans text-center">
+    <h1 class="my-5 text-center text-5xl font-light text-gray-700">
+      Employees
+    </h1>
+
+    <div class="mb-2 px-4">
+      <label
+        for="employee-search"
+        class="sr-only"
+      >Search by name</label>
+      <input
+        id="employee-search"
+        v-model="searchQuery"
+        type="search"
+        autocomplete="off"
+        class="search-box mx-auto w-full max-w-md rounded border border-gray-200 p-2 shadow"
+        placeholder="Search by name"
+        :disabled="loading || !!loadError"
+        aria-describedby="search-hint results-status"
+      >
+      <p
+        id="search-hint"
+        class="mt-1 text-sm text-gray-500"
+      >
+        Enter at least 2 characters to filter by name.
+      </p>
+    </div>
+
+    <div
+      id="results-status"
+      class="sr-only"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
     >
+      {{ resultsAnnouncement }}
+    </div>
+
     <div class="container mx-auto">
       <hr>
-      <cards :filter="filter" :employees="filteredData"/>
+
+      <div
+        v-if="loading"
+        id="loading_animation"
+        role="status"
+        aria-label="Loading employees"
+      />
+
+      <p
+        v-else-if="loadError"
+        class="mx-auto max-w-md rounded border border-red-200 bg-red-50 px-4 py-3 text-red-800"
+        role="alert"
+      >
+        {{ loadError }}
+      </p>
+
+      <template v-else>
+        <p
+          v-if="filteredEmployees.length === 0"
+          class="py-8 text-gray-600"
+        >
+          No employees match your search.
+        </p>
+        <EmployeeCards
+          v-else
+          :employees="filteredEmployees"
+        />
+      </template>
     </div>
   </div>
 </template>
 
-<script>
-import * as json from "./assets/data.json";
+<script setup>
+import { ref, computed, onMounted } from "vue";
 import axios from "axios";
-import Cards from "./components/Cards";
+import EmployeeCards from "./components/EmployeeCards.vue";
+import { filterEmployeesByName } from "./utils/filterEmployees.js";
 
-export default {
-  name: "App",
-  components: {
-    cards: Cards
-  },
-  data() {
-    return {
-      data: Object,
-      query: String,
-      filter: true,
-      filteredData: Object
-    };
-  },
-  methods: {
-    inputChange: function() {
-      let input = this.$refs.searchBox;
+/*
+ * Dummy data: employees are loaded with axios from a static JSON file served by
+ * Vite (public/employees.json). This demonstrates a typical GET + JSON parse flow
+ * without a backend—useful for take-home scope that asks for axios. Swap
+ * EMPLOYEES_JSON_URL for your real API when integrating.
+ */
+const EMPLOYEES_JSON_URL = `${import.meta.env.BASE_URL}employees.json`;
 
-      input.addEventListener("input", event => {
-        event.preventDefault();
-        this.query = input.value;
+const employees = ref([]);
+const loading = ref(true);
+const loadError = ref(null);
+const searchQuery = ref("");
 
-        if (this.query.length > 1) {
-          this.searchEmployees(this.query);
-        } else {
-          this.searchEmployees(null);
-        }
-      });
-    },
-    searchEmployees: function(query) {
-      let data = this.data;
+const filteredEmployees = computed(() =>
+  filterEmployeesByName(employees.value, searchQuery.value),
+);
 
-      if (query && data) {
-        let search = data.filter(employee => {
-          let fullName = employee.name.first.concat(employee.name.last);
-          fullName = fullName.toLowerCase();
-          let searchString = query.toLowerCase();
-
-          if (fullName.includes(searchString)) {
-            return employee;
-          } else {
-            return null;
-          }
-        });
-
-        console.log(search);
-
-        if (search.length > 0) {
-          this.filteredData = search;
-        } else {
-          this.filteredData = null;
-        }
-      } else {
-        this.filteredData = this.data;
-      }
-    }
-  },
-  created() {
-    this.data = json.results;
-    this.filteredData = this.data;
-    this.filter = false;
+const resultsAnnouncement = computed(() => {
+  if (loading.value) {
+    return "Loading.";
   }
-};
-</script>
+  if (loadError.value) {
+    return loadError.value;
+  }
+  const n = filteredEmployees.value.length;
+  return n === 1 ? "1 employee shown." : `${n} employees shown.`;
+});
 
-<style>
-#app {
-  font-family: sans-serif;
-  text-align: center;
-}
-</style>
+onMounted(async () => {
+  loading.value = true;
+  loadError.value = null;
+  try {
+    const { data } = await axios.get(EMPLOYEES_JSON_URL);
+    employees.value = Array.isArray(data.results) ? data.results : [];
+  } catch {
+    loadError.value = "Could not load employees. Try again later.";
+    employees.value = [];
+  } finally {
+    loading.value = false;
+  }
+});
+</script>
